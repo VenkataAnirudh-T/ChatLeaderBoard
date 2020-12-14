@@ -1,0 +1,157 @@
+library(tidyverse)
+library(shiny)
+library(shinythemes)
+library(shinyjs)
+library(ggplot2)
+library(V8)
+library(base)
+library(odbc)
+library(DBI)
+library(dplyr)
+library(dbplyr)
+library(DT)
+#library(shinyWidgets)
+#install.packages('RODBC')
+#library(RODBC)
+
+drvr <- "SQL Server" # When running locally: "SQL Server" ||| When deploying: "SQLServer "
+srvr <- "madappdb-1.ckrzvt7cwi79.us-east-1.rds.amazonaws.com"
+uid <- "appapi"
+pwd <- "madappsapi"
+prt <- 1433
+chatsurveydb <- "chatsurveydb"
+
+con <- dbConnect(odbc::odbc(),Driver = drvr,Server = srvr,Database = chatsurveydb,UID = uid,PWD = pwd,Port = prt)
+userperformance <- dbGetQuery(con,"select UserName,ChatID,Accuracy,TimeTaken  from SurveyorPerformance")
+userresult <- dbGetQuery(con,"select UserName,ChatID,Timer  from SurveyResult")
+dbDisconnect(con)
+
+# Define UI for application that draws a histogram
+ui <- fluidPage(
+    
+    tags$style(HTML("
+      #first {
+          border: 4px double grey;
+      }
+      #second {
+          border: 2px dashed blue;
+      }
+    ")),
+
+    # Application title
+    theme = shinytheme("flatly"),
+    #setBackgroundColor("ghostwhite"),
+    useShinyjs(),
+    titlePanel(title ="User Emotion Survey Leader Board",windowTitle = "Leader Board"),
+    
+    fluidRow(style = "padding-top:15px;background-color: ghostwhite;"),
+    fluidRow(
+        column(id="first",(htmlOutput(outputId = "UserCount")),width = 4,align="center"),
+        column(id="first",(htmlOutput(outputId = "SurveyCount")),width = 4,align="center"),
+        column(id="first",(htmlOutput(outputId = "AverageTime")),width = 4,align="center")
+    ),
+    
+    fluidRow(style = "padding-top:40px;background-color: ghostwhite;"),
+    fluidRow(
+        column((htmlOutput(outputId = "GoldLeague")),width = 3),
+        column(dataTableOutput("GoldPerformanceOverview"),width = 6),
+        column((htmlOutput(outputId = "GoldUserDetail")),width = 3)
+        ),
+    
+    fluidRow(style = "padding-top:10px;background-color: ghostwhite;"),
+    fluidRow(
+        column((htmlOutput(outputId = "SilverLeague")),width = 3),
+        column(dataTableOutput("SilverPerformanceOverview"),width = 6),
+        column((htmlOutput(outputId = "SilverUserDetail")),width = 3)
+    ),
+    
+    fluidRow(style = "padding-top:10px;background-color: ghostwhite;"),
+    fluidRow(
+        column((htmlOutput(outputId = "BronzeLeague")),width = 3),
+        column(dataTableOutput("BronzePerformanceOverview"),width = 6),
+        column((htmlOutput(outputId = "BronzeUserDetail")),width = 3)
+    ),
+    
+    
+    fluidRow(style = "padding-top:20px;background-color: ghostwhite;")
+)
+
+# Define server logic required to draw a histogram
+server <- function(input, output) {
+    
+    usergoldperformance <- userperformance %>% group_by(UserName) %>% summarise(Accuracy=mean(Accuracy),TimeTaken=mean(TimeTaken),SurveyCount=n()) %>% 
+        filter(SurveyCount>=10) %>% 
+        arrange(desc(Accuracy),TimeTaken)
+    usersilverperformance <- userperformance %>% group_by(UserName) %>% summarise(Accuracy=mean(Accuracy),TimeTaken=mean(TimeTaken),SurveyCount=n()) %>% 
+        filter(SurveyCount>=5 & SurveyCount<10) %>% 
+        arrange(desc(Accuracy),TimeTaken)
+    userbronzeperformance <- userperformance %>% group_by(UserName) %>% summarise(Accuracy=mean(Accuracy),TimeTaken=mean(TimeTaken),SurveyCount=n()) %>% 
+        filter(SurveyCount>=1 & SurveyCount<5) %>% 
+        arrange(desc(Accuracy),TimeTaken)
+    
+    output$GoldLeague <- renderText({ '<span style="color: gold;font-size: 200%"><b>Gold League</b></br></span> Complete review of at least <b>10 Chats</b> to be part of this league' })
+    output$GoldPerformanceOverview <- renderDataTable({
+        if (nrow(usergoldperformance)!=0) {
+            datatable(
+                usergoldperformance <- 
+                    mutate(Rank =1:nrow(usergoldperformance %>% 
+                                            distinct(UserName))) %>% select(UserName,SurveyCount,Rank) %>% rename('User Name'=UserName,'No. of Surveys Taken'=SurveyCount)
+                ,escape = F,options = list(pageLength = 5, lengthChange = F,searching=T),rownames = FALSE
+            ) %>% formatStyle(c('User Name','No. of Surveys Taken','Rank'), backgroundColor = 'gold')
+        }
+    })
+    output$GoldUserDetail <- renderText({ 
+        #usergoldcnt <- userperformance %>% group_by(UserName) %>% summarise(SurveyCount=n()) %>% filter(SurveyCount>=10) %>%  summarise(cnt=n_distinct(UserName)) %>%  as.character()
+        usergoldcnt <- usergoldperformance %>% summarise(cnt=n_distinct(UserName)) %>%  as.character()
+        paste('Number of players in <b>Gold League:</b><span style="color: gold;font-size: 150%"><b>',usergoldcnt,'</b></span>', sep=" ")
+         })
+  
+    output$SilverLeague <- renderText({ '<span style="color: silver;font-size: 200%"><b>Silver League</b></br></span> Complete review of at least <b>5 Chats</b> to be part of this league' })
+    output$SilverPerformanceOverview <- renderDataTable({
+        if (nrow(usersilverperformance)!=0) {
+            datatable(
+                usersilverperformance %>% mutate(Rank =1:nrow(usersilverperformance %>% 
+                                        distinct(UserName))) %>% select(UserName,SurveyCount,Rank) %>% rename('User Name'=UserName,'No. of Surveys Taken'=SurveyCount)
+                ,escape = F,options = list(pageLength = 5, lengthChange = F,searching=T),rownames = FALSE
+            ) %>% formatStyle(c('User Name','No. of Surveys Taken','Rank'), backgroundColor = 'silver')
+        }
+    })
+    output$SilverUserDetail <- renderText({ 
+        #usergoldcnt <- userperformance %>% group_by(UserName) %>% summarise(SurveyCount=n()) %>% filter(SurveyCount>=5 & SurveyCount<10) %>%  summarise(cnt=n_distinct(UserName)) %>%  as.character()
+        usersilvercnt <- usersilverperformance %>% summarise(cnt=n_distinct(UserName)) %>%  as.character()
+        paste('Number of players in <b>Silver League:</b><span style="color: silver;font-size: 150%"><b>',usersilvercnt,'</b></span>', sep=" ")
+    })
+    
+    output$BronzeLeague <- renderText({ '<span style="color: #dc6f01;font-size: 200%"><b>Bronze League</b></br></span> Complete review of at least <b>2 Chats</b> to be part of this league' })
+    output$BronzePerformanceOverview <- renderDataTable({
+        if (nrow(userbronzeperformance)!=0) {
+            datatable(
+                userbronzeperformance %>% mutate(Rank =1:nrow(userbronzeperformance %>% 
+                                        distinct(UserName))) %>% select(UserName,SurveyCount,Rank) %>% rename('User Name'=UserName,'No. of Surveys Taken'=SurveyCount)
+                ,escape = F,options = list(pageLength = 5, lengthChange = F,searching=T),rownames = FALSE
+            ) %>% formatStyle(c('User Name','No. of Surveys Taken','Rank'), backgroundColor = '#dc6f01')
+        }
+    })
+    output$BronzeUserDetail <- renderText({ 
+        #usergoldcnt <- userperformance %>% group_by(UserName) %>% summarise(SurveyCount=n()) %>% filter(SurveyCount>=1 & SurveyCount<5) %>% summarise(cnt=n_distinct(UserName)) %>%  as.character()
+        userbronzecnt <- userbronzeperformance %>% summarise(cnt=n_distinct(UserName)) %>%  as.character()
+        paste('Number of players in <b>Bronze League:</b><span style="color: #dc6f01;font-size: 150%"><b>',userbronzecnt,'</b></span>', sep=" ")
+    })
+    
+    output$UserCount <- renderText({ 
+        usercnt <- userperformance %>% summarise(cnt=n_distinct(UserName)) %>%  as.character()
+        paste('Total Number of Participants <br/></b><span style="color: #A5FF33;font-size: 300%"><b>',usercnt,'</b></span>', sep=" ")
+    })
+    output$SurveyCount <- renderText({ 
+        surveycnt <- userperformance %>% summarise(cnt=n()) %>%  as.character()
+        paste('Total Number of Surverys Taken <br/></b><span style="color: #33DAFF ;font-size: 300%"><b>',surveycnt,'</b></span>', sep=" ")
+    })
+    output$AverageTime <- renderText({ 
+        timercnt <- userresult %>% group_by(UserName,ChatID) %>%  summarise(timetaken=sum(Timer)) %>% ungroup() %>% summarise(avg=round(mean(timetaken)/60,2)) %>%  as.character() 
+        paste('Average Time Per Survey <br/></b><span style="color: #FA65EF;font-size: 300%"><b>',timercnt,'</b></span> (minutes*)', sep=" ")
+    })
+    
+}
+
+# Run the application 
+shinyApp(ui = ui, server = server)

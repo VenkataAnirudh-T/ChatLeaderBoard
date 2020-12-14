@@ -1,0 +1,12 @@
+name: Chatsurveyleaderboard
+title: Chatsurveyleaderboard
+username:
+account: anirudh-niu
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 3034397
+bundleId: 3751250
+url: https://anirudh-niu.shinyapps.io/Chatsurveyleaderboard/
+when: 1602905289.66501
+asMultiple: FALSE
+asStatic: FALSE
